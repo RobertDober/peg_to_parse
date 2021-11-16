@@ -1,8 +1,20 @@
 defmodule PegToParse.State do
+
+  use PegToParse.Types
+
   @moduledoc ~S"""
+  Carrying the Parser's state
   """
 
-  defstruct lnb: 1, col: 1, stack: [], rest: ""
+  defstruct col: 1, lnb: 1, stack: [], rest: ""
+
+  @typep stack_t :: [binary()]
+
+  @type t :: %__MODULE__{
+    col: non_neg_integer(),
+    lnb: non_neg_integer(),
+    stack: stack_t(),
+    rest: binary()}
 
   @doc ~S"""
 
@@ -14,6 +26,7 @@ defmodule PegToParse.State do
       %PegToParse.State{ stack: ["new@1:1", "old@1:1"], rest: "some input" }
 
   """
+  @spec make(parse_input_t(), binary()) :: t()
   def make(bin_or_state, name)
   def make(%__MODULE__{lnb: lnb, col: col}=state, name) do
     %{state | stack: ["#{name}@#{lnb}:#{col}" | state.stack]}
@@ -27,6 +40,7 @@ defmodule PegToParse.State do
       ...(3)> make_error_message(state)
       {:error, "Syntax error @ 42:30 (alpha)\n\ta@41:1\n\tb@40:30"}
   """
+  @spec make_error_message(t(), binary()) :: error_parse_result_t()
   def make_error_message(%__MODULE__{rest: rest, stack: stack, lnb: lnb, col: col}, message \\ "Syntax error") do
     {:error, "#{message} @ #{lnb}:#{col} (#{_next_line(rest)})\n\t#{_backtrace(stack)}"}
   end
@@ -37,22 +51,27 @@ defmodule PegToParse.State do
       ...(4)> pop_parsed(state, 'ab', "cdef")
       {:ok, 'ab', %{state|stack: [], col: 3, rest: "cdef"}}
   """
+  @spec pop_parsed(t(), any(), binary()) :: ok_parse_result_t()
   def pop_parsed(state, parsed, rest)
   def pop_parsed(%__MODULE__{}=state, parsed, rest) do
     {:ok, parsed, %{state|stack: tl(state.stack), col: _update_col(state, parsed), rest: rest}}
   end
 
+  
+  @spec _backtrace(stack_t()) :: binary()
   defp _backtrace(stack) do
     stack
     |> Enum.join("\n\t")
   end
 
+  @spec _next_line(binary()) :: binary()
   defp _next_line(str) do
     str
     |> String.split("\n")
     |> hd()
   end
 
+  @spec _update_col(t(), any()) :: non_neg_integer()
   defp _update_col(state, parsed)
   defp _update_col(%__MODULE__{col: col}, parsed) when is_list(parsed) do
     col + Enum.count(parsed)

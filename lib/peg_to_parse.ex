@@ -1,5 +1,8 @@
 defmodule PegToParse do
+
   alias __MODULE__.Implementation
+
+  use PegToParse.Types
 
   @moduledoc """
 
@@ -80,6 +83,7 @@ defmodule PegToParse do
       # iex(4)> char_parser("identifier").("")
       # {:error, "unexpected end of input in char_parser identifier"}
   """
+  @spec char_parser(binary()) :: parser_t()
   def char_parser(name \\ "") do
     &Implementation.parse_char(&1, name)
   end
