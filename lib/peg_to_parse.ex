@@ -18,6 +18,11 @@ defmodule PegToParse do
 
   ## API
 
+  ### General Interface
+  
+  In general parsers expect an
+  ### Some Shortcut Notations for parsers
+  
   A general observation, all combinators, that is all functions that take a parser or list of parsers
   as their first argument accept shortcuts for the char_range_parser, meaning that
   instead of
