@@ -37,6 +37,9 @@ defmodule PegToParse do
       iex(2)> char_parser().(%PegToParse.State{ lnb: 3, col: 10, rest: "alpha"})
       {:ok, ?a, %PegToParse.State{lnb: 3, col: 11, rest: "lpha", stack: []}}
 
+      iex(3)> char_parser().("")
+      {:error, "unexpected end of input in char_parser @ 1:1 ()\n\t"}
+
   ### Some Shortcut Notations for parsers
 
   A general observation, all combinators, that is all functions that take a parser or list of parsers

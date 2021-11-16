@@ -31,6 +31,12 @@ defmodule PegToParse.State do
     {:error, "#{message} @ #{lnb}:#{col} (#{_next_line(rest)})\n\t#{_backtrace(stack)}"}
   end
 
+
+  @doc ~S"""
+      iex(4)> state = %PegToParse.State{stack: ["filled in by make"]}
+      ...(4)> pop_parsed(state, 'ab', "cdef")
+      {:ok, 'ab', %{state|stack: [], col: 3, rest: "cdef"}}
+  """
   def pop_parsed(state, parsed, rest)
   def pop_parsed(%__MODULE__{}=state, parsed, rest) do
     {:ok, parsed, %{state|stack: tl(state.stack), col: _update_col(state, parsed), rest: rest}}
