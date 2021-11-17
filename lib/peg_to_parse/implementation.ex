@@ -12,6 +12,18 @@ defmodule PegToParse.Implementation do
     |> _parse_char()
   end
 
+  @spec satisfy(parse_input_t(), parser_t(), predicate_t(), binary?(), binary?()) :: parse_result_t()
+  def satisfy(input, parser, fun, error_message, name) do
+    with {:ok, result, state} <- parser.(input) do
+      if fun.(result) do
+        {:ok, result, state}
+      else
+        state_ = State.make(input, name)
+        State.make_error_message(state_, error_message || "unsatisified parser")
+      end
+    end
+  end
+
   @spec _parse_char(State.t) :: parse_result_t()
   defp _parse_char(state)
   defp _parse_char(%State{rest: <<char::utf8, rest::binary>>}=state) do

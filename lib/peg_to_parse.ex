@@ -1,10 +1,11 @@
 defmodule PegToParse do
 
-  alias __MODULE__.Implementation
+  alias __MODULE__.{Implementation, State}
+
 
   use PegToParse.Types
 
-  @moduledoc """
+  @moduledoc ~S"""
 
   [![CI](https://github.com/robertdober/peg_to_parse/workflows/CI/badge.svg)](https://github.com/robertdober/peg_to_parse/actions)
   [![Coverage Status](https://coveralls.io/repos/github/RobertDober/peg_to_parse/badge.svg?branch=main)](https://coveralls.io/github/RobertDober/peg_to_parse?branch=main)
@@ -88,63 +89,72 @@ defmodule PegToParse do
     &Implementation.parse_char(&1, name)
   end
 
-  # @doc ~S"""
-  # Parser that succeeds only if the first char of the input is in the indicated
-  # `char_range`
+  @doc ~S"""
+  Parser that succeeds only if the first char of the input is in the indicated
+  `char_range`
 
-  #       iex(5)> parser = char_range_parser([?1..?9, ?a, [?b, ?c]])
-  #       ...(5)> parser.("b")
-  #       {:ok, ?b, ""}
-  #       ...(5)> parser.("9a")
-  #       {:ok, ?9, "a"}
-  #       ...(5)> parser.("d")
-  #       {:error, "expected a char in the range [49..57, 97, 'bc']"}
+        iex(4)> parser = char_range_parser([?1..?9, ?a, [?b, ?c]])
+        ...(4)> parser.("b")
+        {:ok, ?b, ""}
+        ...(4)> parser.("9a")
+        {:ok, ?9, "a"}
+        ...(4)> parser.("d")
+        {:error, "expected a char in the range [49..57, 97, 'bc'] @ 1:1 (d)\n\t"}
 
-  # The `char_range_parser` can also be called with a string which is transformed to
-  # a charlist with `String.to_charlist`
+  The `char_range_parser` can also be called with a string which is transformed to
+  a charlist with `String.to_charlist`
 
-  #       iex(6)> bin_parser = char_range_parser("01")
-  #       ...(6)> bin_parser.("10a")
-  #       {:ok, ?1, "a"}
-  #       ...(6)> bin_parser.("a")
-  #       {:error, "expected a char in the range '01'"}
+        iex(5)> bin_parser = char_range_parser("01")
+        ...(5)> bin_parser.("10a")
+        {:ok, ?1, "a"}
+        ...(5)> bin_parser.("a")
+        {:error, "expected a char in the range '01' @ 1:1 (a)\n\t"}
 
-  #       iex(7)> greek_letter_parser = char_range_parser("αβγδεζηθικλμνξοπρςστυφχψω")
-  #       ...(7)> greek_letter_parser.("σπίτι")
-  #       {:ok, 963, "πίτι"}
+        iex(6)> greek_letter_parser = char_range_parser("αβγδεζηθικλμνξοπρςστυφχψω")
+        ...(6)> greek_letter_parser.("σπίτι")
+        {:ok, 963, %PegToParse.State{col: 2, lnb: 1, rest: "πίτι", stack: []}}
 
-  # The last example is of course better written as
+  The last example is of course better written as
 
-  #       iex(8)> greek_letter_parser = char_range_parser(?α..?ω)
-  #       ...(8)> greek_letter_parser.("σπίτι")
-  #       {:ok, 963, "πίτι"}
+        iex(7)> greek_letter_parser = char_range_parser(?α..?ω)
+        ...(7)> greek_letter_parser.("σπίτι")
+        {:ok, 963, %PegToParse.State{col: 2, lnb: 1, rest: "πίτι", stack: []}}
 
-  # for which reason you can also just pass a range
+  for which reason you can also just pass a range
 
-  # Be aware of a trap in the utf8 code here `?ί(943)` is not in the specified range
+  Be aware of a trap in the utf8 code here `?ί(943)` is not in the specified range
 
-  #       iex(9)> greek_letter_parser = char_range_parser(?α..?ω)
-  #       ...(9)> greek_letter_parser.("ίτι")
-  #       {:error, "expected a char in the range 945..969"}
+        iex(8)> greek_letter_parser = char_range_parser(?α..?ω)
+        ...(8)> greek_letter_parser.("ίτι")
+        {:error, "expected a char in the range 945..969 @ 1:1 (ίτι)\n\t"}
 
-  # """
-  # def char_range_parser(char_range, name \\ "")
+  And of course we can just parse one specific character
 
-  # def char_range_parser(string, name) when is_binary(string) do
-  #   string
-  #   |> String.to_charlist()
-  #   |> char_range_parser(name)
-  # end
+        iex(9)> alpha_parser = char_range_parser(?α)
+        ...(9)> alpha_parser.("αβ")
+        {:ok, ?α, %PegToParse.State{col: 2, lnb: 1, rest: "β", stack: []}}
 
-  # def char_range_parser(char_range, name) do
-  #   char_parser()
-  #   |> satisfy(
-  #     &_in_range?(&1, char_range),
-  #     "expected a char in the range #{inspect(char_range)}",
-  #     name
-  #   )
-  # end
+        iex(10)> alpha_parser = char_range_parser(?α)
+        ...(10)> alpha_parser.("β")
+        {:error, "expected a char in the range [945] @ 1:1 (β)\n\t"}
+  """
+  def char_range_parser(char_range, name \\ "")
+  def char_range_parser(char, name) when is_number(char) do
+    char_range_parser([char], name)
+  end
+  def char_range_parser(string, name) when is_binary(string) do
+    string
+    |> String.to_charlist()
+    |> char_range_parser(name)
+  end
 
+  def char_range_parser(char_range, name) do
+    char_parser()
+    |> satisfy(
+      &_in_range?(&1, char_range),
+      "expected a char in the range #{inspect(char_range)}",
+      name)
+  end
   # @doc ~S"""
   # the _inverse_ of the `char_range_parser`
 
@@ -444,45 +454,39 @@ defmodule PegToParse do
   #   |> map(&IO.chardata_to_string/1)
   # end
 
-  # @doc ~S"""
-  # satisfy is a general purpose filtering refinement of a parser
-  # it takes a perser, a function, an optional error message and an optional name
+  @doc ~S"""
+  satisfy is a general purpose filtering refinement of a parser
+  it takes a perser, a function, an optional error message and an optional name
 
-  # it creates a parser that parses the input with the passed in parser, if it fails
-  # nothing changes, however if it succeeds the function is called on the result of
-  # the parse and the thusly created parser only succeeds if the function call returns
-  # a truthy value
+  it creates a parser that parses the input with the passed in parser, if it fails
+  nothing changes, however if it succeeds the function is called on the result of
+  the parse and the thusly created parser only succeeds if the function call returns
+  a truthy value
 
-  # Here is an example how digit_parser could be implemented (in reality it is implemented
-  # using char_range_parser, which then uses satisfy in a more general way, too long to
-  # be a good doctest)
+  Here is an example how digit_parser could be implemented (in reality it is implemented
+  using char_range_parser, which then uses satisfy in a more general way, too long to
+  be a good doctest)
 
-  #     iex(37)> dparser = char_parser() |> satisfy(&Enum.member?(?0..?9, &1), "not a digit")
-  #     ...(37)> dparser.("1")
-  #     {:ok, ?1, ""}
-  #     ...(37)> dparser.("a")
-  #     {:error, "not a digit"}
+      iex(11)> dparser = char_parser() |> satisfy(&Enum.member?(?0..?9, &1), "not a digit")
+      ...(11)> dparser.("1")
+      {:ok, ?1, ""}
+      ...(11)> dparser.("a")
+      {:error, "not a digit @ 1:1 (a)\n\t"}
 
-  # as satisfy is a combinator we can use shortcuts too
+  as satisfy is a combinator we can use shortcuts too
 
-  #     iex(38)> voyel_parser = "abcdefghijklmnopqrstuvwxyz"
-  #     ...(38)> |> satisfy(&Enum.member?([?a, ?e, ?i, ?o, ?u], &1), "expected a voyel")
-  #     ...(38)> voyel_parser.("a")
-  #     {:ok, ?a, ""}
-  #     ...(38)> voyel_parser.("b")
-  #     {:error, "expected a voyel"}
+      iex(12)> voyel_parser = "abcdefghijklmnopqrstuvwxyz"
+      ...(12)> |> satisfy(&Enum.member?([?a, ?e, ?i, ?o, ?u], &1), "expected a voyel")
+      ...(12)> voyel_parser.("a")
+      {:ok, ?a, ""}
+      ...(12)> voyel_parser.("b")
+      {:error, "expected a voyel @ 1:1 (b)\n\t"}
 
-  # """
-  # def satisfy(parser, fun, error_message \\ nil, name \\ "") do
-  #   parser_ = _make_parser(parser)
-  #   fn input ->
-  #     with {:ok, result, rest} <- parser_.(input) do
-  #       if fun.(result),
-  #         do: {:ok, result, rest},
-  #         else: _error_message(error_message || "unsatisified parser", name)
-  #     end
-  #   end
-  # end
+  """
+  def satisfy(parser, fun, error_message \\ nil, name \\ "") do
+    parser_ = _make_parser(parser)
+    &Implementation.satisfy(&1, parser_, fun, error_message, name)
+  end
 
   # @doc ~S"""
   # sequence combines a list of parser to a parser that succeeds only if all parsers
@@ -653,20 +657,21 @@ defmodule PegToParse do
   #   end
   # end
 
-  defp _error_message(message, name\\"") do
-    {:error,
-     "#{message} #{name}"
-     |> String.trim_trailing()}
-  end
-
-  # defp _in_range?(element, ranges) do
-  #   ranges
-  #   |> Enum.any?(fn
-  #     %Range{} = r -> Enum.member?(r, element)
-  #     [_ | _] = l -> _in_range?(element, l)
-  #     x -> element == x
-  #   end)
+  # defp _error_message(message, name\\"") do
+  #   {:error,
+  #    "#{message} #{name}"
+  #    |> String.trim_trailing()}
   # end
+
+  @spec _in_range?(any(), Enumerable.t) :: boolean()
+  defp _in_range?(element, ranges) do
+    ranges
+    |> Enum.any?(fn
+      %Range{} = r -> Enum.member?(r, element)
+      [_ | _] = l -> _in_range?(element, l)
+      x -> element == x
+    end)
+  end
 
   # defp _make_charlist(str_or_chr_or_list)
   # defp _make_charlist(str) when is_binary(str),
@@ -676,16 +681,17 @@ defmodule PegToParse do
   # defp _make_charlist(list) when is_list(list),
   #   do: list
 
-  # defp _make_parser(string_or_fun)
+  @spec _make_parser(sum_t(binary(), parser_t())) :: parser_t()
+  defp _make_parser(string_or_fun)
 
   # defp _make_parser(number) when is_number(number),
   #   do: [number] |> char_range_parser()
 
-  # defp _make_parser(string) when is_binary(string),
-  #   do: string |> String.to_charlist() |> char_range_parser()
+  defp _make_parser(string) when is_binary(string),
+    do: string |> String.to_charlist() |> char_range_parser()
 
-  # defp _make_parser(fun) when is_function(fun),
-  #   do: fun
+  defp _make_parser(fun) when is_function(fun),
+    do: fun
 
   # defp _many(parser) do
   #   fn input ->

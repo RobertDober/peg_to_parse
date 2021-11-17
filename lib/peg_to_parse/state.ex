@@ -36,9 +36,10 @@ defmodule PegToParse.State do
   end
 
   @doc ~S"""
-      iex(3)> state = %PegToParse.State{ lnb: 42, col: 30, rest: "alpha\nbeta", stack: ["a@41:1", "b@40:30"] }
-      ...(3)> make_error_message(state)
+
+      iex(3)> make_error_message(%PegToParse.State{ lnb: 42, col: 30, rest: "alpha\nbeta", stack: ["a@41:1", "b@40:30"] })
       {:error, "Syntax error @ 42:30 (alpha)\n\ta@41:1\n\tb@40:30"}
+
   """
   @spec make_error_message(t(), binary()) :: error_parse_result_t()
   def make_error_message(%__MODULE__{rest: rest, stack: stack, lnb: lnb, col: col}, message \\ "Syntax error") do
@@ -47,9 +48,11 @@ defmodule PegToParse.State do
 
 
   @doc ~S"""
-      iex(4)> state = %PegToParse.State{stack: ["filled in by make"]}
-      ...(4)> pop_parsed(state, 'ab', "cdef")
-      {:ok, 'ab', %{state|stack: [], col: 3, rest: "cdef"}}
+
+      iex(4)> {:ok, 'ab', %{stack: [], col: 3, rest: rest}} = pop_parsed(%PegToParse.State{stack: ["filled in by make"]}, 'ab', "cdef")
+      ...(4)> rest
+      "cdef"
+
   """
   @spec pop_parsed(t(), any(), binary()) :: ok_parse_result_t()
   def pop_parsed(state, parsed, rest)
@@ -57,7 +60,7 @@ defmodule PegToParse.State do
     {:ok, parsed, %{state|stack: tl(state.stack), col: _update_col(state, parsed), rest: rest}}
   end
 
-  
+
   @spec _backtrace(stack_t()) :: binary()
   defp _backtrace(stack) do
     stack
