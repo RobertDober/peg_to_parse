@@ -2,6 +2,7 @@ defmodule PegToParse do
 
   alias __MODULE__.{Implementation, State}
 
+  @type char_range_t :: sum_t(list(), binary(), non_neg_integer())
 
   use PegToParse.Types
 
@@ -20,7 +21,7 @@ defmodule PegToParse do
   this is a non memoizing Parse Expression Grammar parser. It should be ideal for parsing middle length
   documents.
 
-  It uses very simple and well known parsing technique but puts an emphasis at _useful_ error messages.
+  It uses very simple and well known parsing techniques but puts an emphasis on _helpful_ error messages.
 
   ## API
 
@@ -138,7 +139,8 @@ defmodule PegToParse do
         ...(10)> alpha_parser.("β")
         {:error, "expected a char in the range [945] @ 1:1 (β)\n\t"}
   """
-  def char_range_parser(char_range, name \\ "")
+  @spec char_range_parser(char_range_t(), binary?()) :: parser_t()
+  def char_range_parser(char_range, name \\ nil)
   def char_range_parser(char, name) when is_number(char) do
     char_range_parser([char], name)
   end
@@ -155,33 +157,39 @@ defmodule PegToParse do
       "expected a char in the range #{inspect(char_range)}",
       name)
   end
-  # @doc ~S"""
-  # the _inverse_ of the `char_range_parser`
+  @doc ~S"""
+  the _inverse_ of the `char_range_parser`
 
-  #     iex(10)> char_not_in_range_parser("01").("a")
-  #     {:ok, ?a, ""}
+      iex(11)> char_not_in_range_parser("01").("a")
+      {:ok, ?a, %PegToParse.State{col: 2, lnb: 1, rest: "", stack: []}}
 
-  #     iex(11)> char_not_in_range_parser([?0, ?1]).("a")
-  #     {:ok, ?a, ""}
+      iex(12)> char_not_in_range_parser([?0, ?1]).("a")
+      {:ok, ?a, %PegToParse.State{col: 2, lnb: 1, rest: "", stack: []}}
 
-  #     iex(12)> char_not_in_range_parser("01").("0")
-  #     {:error, "unsatisified parser"}
+      iex(13)> char_not_in_range_parser("01").("0")
+      {:error, "unsatisified parser @ 1:1 (0)\n\t"}
 
-  #     iex(13)> char_not_in_range_parser([?0, ?1]).("1")
-  #     {:error, "unsatisified parser"}
+      iex(14)> char_not_in_range_parser([?0, ?1]).("1")
+      {:error, "unsatisified parser @ 1:1 (1)\n\t"}
 
-  # Again the error messages are not yet as good as they should be
-  # """
-  # def char_not_in_range_parser(char_range)
-  # def char_not_in_range_parser(char_range) when is_binary(char_range) do
-  #   char_range
-  #   |> _make_charlist
-  #   |> char_not_in_range_parser()
-  # end
-  # def char_not_in_range_parser(char_range) do
-  #   char_parser()
-  #   |> satisfy(fn char -> !_in_range?(char, _make_charlist(char_range)) end)
-  # end
+  And naming the parser gets us better error messages
+
+      iex(15)> char_not_in_range_parser(?1, "not a one").("1")
+      {:error, "not a one @ 1:1 (1)\n\t"}
+
+  Again the error messages are not yet as good as they should be
+  """
+  @spec char_not_in_range_parser(char_range_t(), binary?()) :: parser_t()
+  def char_not_in_range_parser(char_range, name \\ nil)
+  def char_not_in_range_parser(char_range, name) when is_binary(char_range) do
+    char_range
+    |> _make_charlist
+    |> char_not_in_range_parser(name)
+  end
+  def char_not_in_range_parser(char_range, name) do
+    char_parser()
+    |> satisfy(fn char -> !_in_range?(char, _make_charlist(char_range)) end, name)
+  end
 
   # @doc ~S"""
   # A parser that combines a list of parsers in a way to parse the input string
@@ -467,19 +475,19 @@ defmodule PegToParse do
   using char_range_parser, which then uses satisfy in a more general way, too long to
   be a good doctest)
 
-      iex(11)> dparser = char_parser() |> satisfy(&Enum.member?(?0..?9, &1), "not a digit")
-      ...(11)> dparser.("1")
+      iex(16)> dparser = char_parser() |> satisfy(&Enum.member?(?0..?9, &1), "not a digit")
+      ...(16)> dparser.("1")
       {:ok, ?1, ""}
-      ...(11)> dparser.("a")
+      ...(16)> dparser.("a")
       {:error, "not a digit @ 1:1 (a)\n\t"}
 
   as satisfy is a combinator we can use shortcuts too
 
-      iex(12)> voyel_parser = "abcdefghijklmnopqrstuvwxyz"
-      ...(12)> |> satisfy(&Enum.member?([?a, ?e, ?i, ?o, ?u], &1), "expected a voyel")
-      ...(12)> voyel_parser.("a")
+      iex(17)> voyel_parser = "abcdefghijklmnopqrstuvwxyz"
+      ...(17)> |> satisfy(&Enum.member?([?a, ?e, ?i, ?o, ?u], &1), "expected a voyel")
+      ...(17)> voyel_parser.("a")
       {:ok, ?a, ""}
-      ...(12)> voyel_parser.("b")
+      ...(17)> voyel_parser.("b")
       {:error, "expected a voyel @ 1:1 (b)\n\t"}
 
   """
@@ -673,13 +681,14 @@ defmodule PegToParse do
     end)
   end
 
-  # defp _make_charlist(str_or_chr_or_list)
-  # defp _make_charlist(str) when is_binary(str),
-  #   do: String.to_charlist(str)
-  # defp _make_charlist(char) when is_number(char),
-  #   do: [char]
-  # defp _make_charlist(list) when is_list(list),
-  #   do: list
+  @spec _make_charlist(char_range_t()) :: char_list_t()
+  defp _make_charlist(str_or_chr_or_list)
+  defp _make_charlist(str) when is_binary(str),
+    do: String.to_charlist(str)
+  defp _make_charlist(char) when is_number(char),
+    do: [char]
+  defp _make_charlist(list) when is_list(list),
+    do: list
 
   @spec _make_parser(sum_t(binary(), parser_t())) :: parser_t()
   defp _make_parser(string_or_fun)

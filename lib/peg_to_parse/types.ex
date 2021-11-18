@@ -7,6 +7,9 @@ defmodule PegToParse.Types do
   defmacro __using__(_opts \\ []) do
     quote do
       @type binary? :: maybe(binary())
+
+      @type char_list_t :: list(non_neg_integer())
+
       @type error_parse_result_t :: {:error, binary()}
 
       @type maybe(base_t) :: base_t | nil
@@ -18,6 +21,7 @@ defmodule PegToParse.Types do
       @type parser_t :: (parse_input_t() -> parse_result_t())
 
       @type sum_t(t1, t2) :: t1 | t2
+      @type sum_t(t1, t2, t3) :: t1 | t2 | t3
     end
   end
 
