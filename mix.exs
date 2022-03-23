@@ -7,18 +7,21 @@ defmodule Peg.MixProject do
   @url "https://github.com/robertdober/peg_to_parse"
 
   @description """
-  PegToParse is a simple Peg Parser (w/o Memoization so beware of Left Recursive Grammars)
-
-  It is a Combinator and not a Generator like, e.g. nimble_parsec (which has a nice peg like interface though)
-  and is a great library with great performance which we are not aiming to replace or compete with.
+  `PegToParse` is a simple **Peg Parser** (w/o Memoization so beware of Left Recursive Grammars)
 
   This library is inspired by Saša Jurić's talk [Parsing from first principles](https://www.youtube.com/watch?v=xNzoerDljjo)
+
+  It uses very simple and well known parsing technique but puts an emphasis on _useful_ error messages.
+
+  It is a Combinator and not a Generator like, e.g. `nimble_parsec` (which has a nice peg like interface though)
+  and is a great library with great performance which we are not aiming to replace or compete with.
   """
   def project do
     [
       aliases: [docs: &build_docs/1],
       app: :peg_to_parse,
       deps: deps(),
+      description: @description,
       elixir: "~> 1.11",
       elixirc_paths: elixirc_paths(Mix.env()),
       preferred_cli_env: [
@@ -29,7 +32,7 @@ defmodule Peg.MixProject do
       ],
       start_permanent: Mix.env() == :prod,
       test_coverage: [tool: ExCoveralls],
-      version: "0.1.0"
+      version: @version
     ]
   end
 

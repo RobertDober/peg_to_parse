@@ -11,15 +11,7 @@
 
 # PegToParse: A simple parser combinator
 
-`PegToParse` is a simple **Peg Parser** (w/o Memoization so beware of Left Recursive Grammars)
-
-This library is inspired by Saša Jurić's talk [Parsing from first principles](https://www.youtube.com/watch?v=xNzoerDljjo)
-
-It uses very simple and well known parsing technique but puts an emphasis on _useful_ error messages.
-
-It is a Combinator and not a Generator like, e.g. `nimble_parsec` (which has a nice peg like interface though)
-and is a great library with great performance which we are not aiming to replace or compete with.
-
+<%= with {:ok, description} <- :application.get_key(:peg_to_parse, :description), do: to_string(description) %>
 
 inspired by Saša Jurić's talk [Parsing from first principles](https://www.youtube.com/watch?v=xNzoerDljjo)
 this is a non memoizing Parse Expression Grammar parser. It should be ideal for parsing middle length
