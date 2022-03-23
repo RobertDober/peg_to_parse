@@ -4,8 +4,8 @@ defmodule Peg.Input do
   def new(input)
   def new(%__MODULE__{} = input), do: input
   def new(input) when is_binary(input), do: new(String.split(input, "\n"))
-  def new([]), do: %__MODULE__{lines: [], current: ""}
-  def new([current|_]=lines), do: %__MODULE__{current: current, lines: lines}
+  def new([]), do: %__MODULE__{lines: [""], current: ""}
+  def new([current|_]=lines), do: %__MODULE__{current: "#{current}\n", lines: lines}
 
   def error(%__MODULE__{} = input, message, cut \\ false) do
     if cut do
@@ -21,7 +21,7 @@ defmodule Peg.Input do
   def update(%__MODULE__{lines: [_ | lines], lnb: lnb} = input, "", _col) do
     case lines do
       [] -> %{input | lines: [], col: 0, current: "" }
-      [line|_] -> %{input | lines: lines, current: line, col: 0, lnb: lnb + 1}
+      [line|_] -> %{input | lines: lines, current: "#{line}\n", col: 0, lnb: lnb + 1}
     end
   end
 
@@ -31,12 +31,12 @@ defmodule Peg.Input do
   end
 
   def update(
-        %__MODULE__{lines: [line | lines], col: col, lnb: lnb} = input,
+        %__MODULE__{current: current} = input,
         [match | _],
         _col_incr
       ) do
     matched_len = String.length(match)
-    rest = String.slice(line, matched_len..-1)
+    rest = String.slice(current, matched_len..-1)
     update(input, rest, matched_len)
   end
 

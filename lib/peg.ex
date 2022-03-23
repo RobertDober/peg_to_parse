@@ -21,6 +21,10 @@ defmodule Peg do
   #
   # ================================
 
+  def many(parser, name \\ "many") do
+    &parse_many(&1, parser, name)
+  end
+
   def map(parser, mapper) do
     fn input ->
       with {:ok, result, rest} <- parser.(input) do
@@ -93,6 +97,15 @@ defmodule Peg do
 
   defp parse_any_char("", input) do
     error(input, "any_char_parser", false)
+  end
+
+  defp parse_many(input, parser, name) do
+    case parser.(input)  do
+      {:error, _, _} -> {:ok, [], input}
+      {:ok, head, input1} ->
+        {:ok, tail, inputn} = parse_many(input1, parser, name)
+        {:ok, [head|tail], inputn}
+    end
   end
 
   defp parse_regex(string, input, rgx, name) do
