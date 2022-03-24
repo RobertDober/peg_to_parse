@@ -14,6 +14,19 @@ defmodule Test.SpecialisedParsersTest do
     end
   end
 
+  describe "char_range_parser" do
+    test "char ranges are what they are named for" do
+      digit = char_range_parser(?0..?9)
+      assert parse_ok(digit, "42") == {?4, input("42", "2\n", col: 1)}
+      assert parse_error(digit, "a2") == {~W[char_range_parser(48..57)], "a2", 1, 0}
+    end
+    test "sets can be passed in as strings" do
+      voyel = char_range_parser("aeiouy")
+      assert parse_ok(voyel, "ab") == {?a, input("ab", "b\n", col: 1)}
+      assert parse_error(voyel, "ba") == {~W[char_range_parser("aeiouy")], "ba", 1, 0}
+    end
+  end
+
   describe "word_parser" do
     test "parse a specific word" do
       assert parse_result(word_parser("elixir"), "elixir") == "elixir"

@@ -4,6 +4,10 @@ defmodule Support.ParserHelpers do
     %{Peg.Input.new(lines) | lnb: Keyword.get(opts, :lnb, 1), col: Keyword.get(opts, :col, 0), current: current1}
   end
 
+  def parse_ok(parser, input) do
+    with {:ok, result, input1} <- Peg.parse(parser, input), do: {result, input1}
+  end
+
   def parse_error(parser, input) do
     with {:error, message, %{errors: errors, lines: lines, col: col, lnb: lnb}} <-
            Peg.parse(parser, input),
