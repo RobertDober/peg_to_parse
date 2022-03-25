@@ -7,7 +7,7 @@ defmodule Test.BaseParsersTest do
     end
 
     test "empty" do
-      {:ok, _, input} = parse(any_char_parser, "")
+      {:ok, _, input} = parse(any_char_parser(), "")
       assert parse_error(any_char_parser(), input) == {~W[any_char_parser], nil, 1, 0}
     end
 
