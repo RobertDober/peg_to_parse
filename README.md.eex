@@ -23,6 +23,8 @@ It uses very simple and well known parsing technique but puts an emphasis on _us
 
 <%= xtra.moduledoc "Peg", include: :all, wrap_code_blocks: "elixir", headline: 3 %>
 
+<%= xtra.moduledoc "Peg.Helpers", include: :all, wrap_code_blocks: "elixir", headline: 3 %>
+
 ## Author
 
 Copyright © 2022 Robert Dober

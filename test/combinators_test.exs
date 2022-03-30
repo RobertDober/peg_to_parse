@@ -14,6 +14,11 @@ defmodule Test.CombinatorsTest do
     test "if we are not interested in failures below" do
       assert parse_error(name_parser(true), " elixir") == {["a name"], " elixir", 1, 0}
     end
+
+    test "a little bit more complex" do
+      digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1))
+      assert parse_error(digit_parser, "a") == {["satisfy"], "a", 1, 0}
+    end
   end
 
   describe "many to slurp in everything" do
