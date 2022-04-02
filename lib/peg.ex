@@ -138,6 +138,27 @@ defmodule Peg do
     &parse_choice(&1, parsers, name, cut)
   end
 
+  # TODO: Check if satisfy is not enough
+  # @doc ~S"""
+  # `context` is a combinator that delays the generation of a parser depending
+  # on the result of a parser.
+
+  # """
+  # def context(parser, more) do
+  # end
+
+  @doc ~S"""
+  `debug` is a combinator that parses exactly the same input as its parser, but inspects the parser's result
+  onto `:stdout`
+  """
+  def debug(parser, label \\ :debug) do
+    fn input ->
+      parser
+      |> element_to_parser()
+      |> parse(input)
+      |> IO.inspect(label: label)
+    end
+  end
   @doc ~S"""
   `ignore` is a combinator that discards the result of a successful parser and replaces the
   `:ok` headed tuple response with an `:ignore` headed tuple response. This is not so useful
@@ -174,6 +195,7 @@ defmodule Peg do
     ignore(sequence(parser))
   end
   def ignore(parser) do
+    parser = element_to_parser(parser)
     fn input ->
       with {:ok, _, input1} <- parse(parser, input), do: {:ignore, nil, input1}
     end
@@ -218,6 +240,7 @@ defmodule Peg do
       [~W[a1 b2 c3]]
   """
   def list(element_parser, seperator_parser, name \\ "list", cut \\ false) do
+    [element_parser, seperator_parser] = list_to_parsers([element_parser, seperator_parser])
     sequence([
       token(element_parser),
       many([
@@ -229,22 +252,35 @@ defmodule Peg do
   end
 
   @doc ~S"""
+  `list?` is like the `list` parser, but also accepts empty lists
+
+      iex(14)> empty_list_parser = list?(token(?a), ignore(token(?,)))
+      ...(14)> {:ok, [], _} = parse(empty_list_parser, "")
+      ...(14)> {:ok, [?a, ?a], _} =parse(empty_list_parser, "a, a")
+      ...(14)> :ok
+      :ok
+  """
+  def list?(element_parser, seperator_parser, name \\ "list", cut \\ false) do
+    choice([list(element_parser, seperator_parser, name, cut), empty_parser([])])
+  end
+
+  @doc ~S"""
   `many` is a combinator that parses with a parser as often as it can
 
   **N.B.** `many` never fails as it will just return `[]` and **not advance**
   the input if its parser fails immediately.
 
-        iex(14)> all = many(any_char_parser())
-        ...(14)> {:ok, result1, rest} = parse(all, "123")
-        ...(14)> {result1, rest.lines}
+        iex(15)> all = many(any_char_parser())
+        ...(15)> {:ok, result1, rest} = parse(all, "123")
+        ...(15)> {result1, rest.lines}
         {[?1, ?2, ?3, ?\n], []}
 
   As a convenience the pattern `many(sequence([...]))` can be expressed
   simply as `many([...])`
 
-        iex(15)> abs = many([char_parser(?a), char_parser(?b)])
-        ...(15)> {:ok, result, _} = parse(abs, "ababc")
-        ...(15)> result
+        iex(16)> abs = many([char_parser(?a), char_parser(?b)])
+        ...(16)> {:ok, result, _} = parse(abs, "ababc")
+        ...(16)> result
         ['ab', 'ab']
 
   """
@@ -260,24 +296,42 @@ defmodule Peg do
   @doc ~S"""
   `manys` is a convenience shortcut for `many |> map(&IO.chardata_to_string/1)`
 
-        iex(16)> abs = manys([char_parser(?a), char_parser(?b)])
-        ...(16)> {:ok, result, _} = parse(abs, "ababc")
-        ...(16)> result
+        iex(17)> abs = manys([char_parser(?a), char_parser(?b)])
+        ...(17)> {:ok, result, _} = parse(abs, "ababc")
+        ...(17)> result
         "abab"
   """
   def manys(parser, name \\ "manys") do
     many(parser, name) |> map(&IO.chardata_to_string/1)
   end
-  
+
   @doc ~S"""
   `map` is a combinator that maps a parser's result with a mapper function but only
   if the parser succeeds, if it fails the parser's error is bubbled up
 
-        iex(17)> all = many(any_char_parser())
-        ...(17)> {:ok, result, _} = parse(map(all, &IO.chardata_to_string/1), "123")
-        ...(17)> result
+        iex(18)> all = many(any_char_parser())
+        ...(18)> {:ok, result, _} = parse(map(all, &IO.chardata_to_string/1), "123")
+        ...(18)> result
         "123\n"
+
+  For convenience one can pass a list of functions instead of one function to the second
+  argument, this list of functions is than composed to a single function with `Peg.Helpers.compose/1`
+  meaning that the functions are applied in the order of the list
+
+        iex(19)> parser = sequence([ignore(?:), :ws, regex_parser(:alpha)])
+        ...(19)> make_map = &Map.new([:value], fn x -> {x, &1} end)
+        ...(19)> add_tag = &Map.put(&1, :tag, :example)
+        ...(19)> mapped_parser = parser |> map([make_map, add_tag])
+        ...(19)> {:ok, result, _} = parse(mapped_parser, ":  hello")
+        ...(19)> result
+        %{tag: :example, value: ~W[hello]}
+
   """
+  def map(parser, mapper)
+  def map(parser, mappers) when is_list(mappers) do
+    parser
+    |> map(mappers |> compose())
+  end
   def map(parser, mapper) do
     fn input ->
       with {:ok, result, rest} <- parse(parser, input) do
@@ -293,22 +347,22 @@ defmodule Peg do
   If the condition is _satisfied_ the parser's success is bubbled up, else
   an error is issued
 
-        iex(18)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1))
-        ...(18)> {:ok, digit, _} = parse(digit_parser, "0")
-        ...(18)> digit
+        iex(20)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1))
+        ...(20)> {:ok, digit, _} = parse(digit_parser, "0")
+        ...(20)> digit
         ?0
 
-        iex(19)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1))
-        ...(19)> {:error, parser_name, %{errors: errors}} = parse(digit_parser, "a")
-        ...(19)> {parser_name, errors}
+        iex(21)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1))
+        ...(21)> {:error, parser_name, %{errors: errors}} = parse(digit_parser, "a")
+        ...(21)> {parser_name, errors}
         {"satisfy", ["satisfy"]}
 
   As we can see in the last example naming might help a lot for a better understanding of the
   error message
 
-        iex(20)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "must be a digit")
-        ...(20)> {:error, parser_name, %{errors: errors}} = parse(digit_parser, "a")
-        ...(20)> {parser_name, errors}
+        iex(22)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "must be a digit")
+        ...(22)> {:error, parser_name, %{errors: errors}} = parse(digit_parser, "a")
+        ...(22)> {parser_name, errors}
         {"must be a digit", ["must be a digit"]}
 
   """
@@ -327,26 +381,40 @@ defmodule Peg do
   @doc ~S"""
   `sequence` is a combinator that parses a sequence of parsers and only succeeds if all oif them succeed
 
-        iex(21)> alpha_parser = satisfy(any_char_parser(), &Enum.member?(?a..?z, &1), "lowercase")
-        ...(21)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "digit")
-        ...(21)> id_parser = sequence([alpha_parser, digit_parser])
-        ...(21)> {:ok, result, _} = parse(id_parser, "a2")
-        ...(21)> result
+        iex(23)> alpha_parser = satisfy(any_char_parser(), &Enum.member?(?a..?z, &1), "lowercase")
+        ...(23)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "digit")
+        ...(23)> id_parser = sequence([alpha_parser, digit_parser])
+        ...(23)> {:ok, result, _} = parse(id_parser, "a2")
+        ...(23)> result
         'a2'
 
   When the parser fails naming becomes important again and we can tell the sequence to cut out basic
   parsers from the error stack
 
-        iex(22)> alpha_parser = satisfy(any_char_parser(), &Enum.member?(?a..?z, &1), "lowercase")
-        ...(22)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "digit")
-        ...(22)> id_parser = sequence([alpha_parser, digit_parser], "id parser", true)
-        ...(22)> {:error, _, %{errors: errors}} = parse(id_parser, "ab")
-        ...(22)> errors
+        iex(24)> alpha_parser = satisfy(any_char_parser(), &Enum.member?(?a..?z, &1), "lowercase")
+        ...(24)> digit_parser = satisfy(any_char_parser(), &Enum.member?(?0..?9, &1), "digit")
+        ...(24)> id_parser = sequence([alpha_parser, digit_parser], "id parser", true)
+        ...(24)> {:error, _, %{errors: errors}} = parse(id_parser, "ab")
+        ...(24)> errors
         ["id parser"]
   """
   defdelegate sequence(parsers, name \\ "sequence", cut \\ false),
     to: Parsers.SequenceParser,
     as: :new
+
+  @doc ~S"""
+  `sequences` is a convenience wrapper around `sequence(...)|>map(&IO.chardata_to_string/1)`
+
+      iex(25)> word_parser = sequences([?a, ?b])
+      ...(25)> {:ok, result, _} = parse(word_parser, "ab")
+      ...(25)> result
+      "ab"
+  """
+  def sequences(parsers, name \\ "sequences", cut \\ false) do
+    parsers
+    |> sequence(name, cut)
+    |> map(&IO.chardata_to_string/1)
+  end
 
   @doc ~S"""
   `surrounded_by` is a convenience combinator which is short for
@@ -360,8 +428,8 @@ defmodule Peg do
 
   The canonical example is a parser to parse literal strings
 
-      iex(23)> str_lit_parser = surrounded_by(~S{"}, "\\")
-      ...(23)> {:ok, ~s{he"llo}, _} = parse(str_lit_parser, ~s{"he\\"llo"})
+      iex(26)> str_lit_parser = surrounded_by(~S{"}, "\\")
+      ...(26)> {:ok, ~s{he"llo}, _} = parse(str_lit_parser, ~s{"he\\"llo"})
 
   """
   def surrounded_by(surrounder, escaper, name \\ nil) do
@@ -394,53 +462,24 @@ defmodule Peg do
 
   And the fourth parameter is the cut for the error stack, defaulting to `false`
 
-      iex(24)> if_parser = token(word_parser("if"))
-      ...(24)> {:ok, result, _} = parse(if_parser, "\n if")
-      ...(24)> result
+      iex(27)> if_parser = token(word_parser("if"))
+      ...(27)> {:ok, result, _} = parse(if_parser, "\n if")
+      ...(27)> result
       "if"
 
 
   In case a regex is passed in, then a regex parser is constructed
 
-      iex(25)> id_parser = token(~r/\A [[:alpha:]]+ /x, false)
-      ...(25)> {:ok, result, _} = parse(id_parser, "  hello42")
-      ...(25)> result
+      iex(28)> id_parser = token(~r/\A [[:alpha:]]+ /x, false)
+      ...(28)> {:ok, result, _} = parse(id_parser, "  hello42")
+      ...(28)> result
       ["hello"]
 
-  In any other case a sequence((char_range_parser(param), many(char_range_parser(param))]) is constructed
-
-      iex(26)> id_parser = token(?a..?z, true, "id")
-      ...(26)> {:error, "id", _} = parse(id_parser, "42")
-      ...(26)> {:ok, result, _} = parse(id_parser, "  hello42")
-      ...(26)> result
-      "hello"
   """
-  def token(parser_or_spec, vertical \\ true, name \\ "token")
-
-  def token(%Regex{} = regex, vertical, name) do
-    regex
-    |> regex_parser()
-    |> token(vertical, name)
-  end
-
-  def token(%Range{} = range, vertical, name) do
-    [range]
-    |> token(vertical, name)
-  end
-
-  def token(parser, vertical, name) when is_function(parser) or is_struct(parser) do
-    &parse_parser_token(&1, parser, vertical, name)
-  end
-
-  def token(chars, vertical, name) do
-    crp = char_range_parser(chars)
-
-    sequence([
-      ignore(ws_parser(vertical)),
-      crp,
-      many(crp)
-    ], name)
-    |> map(&IO.chardata_to_string/1)
+  def token(parser_or_spec, vertical \\ true, name \\ "token") do
+    parser_or_spec
+    |> element_to_parser()
+    |> _token(vertical, name)
   end
 
   # ================================
@@ -452,8 +491,8 @@ defmodule Peg do
   @doc ~S"""
   `any_char_parser` is a parser that parses any character
 
-        iex(27)> {:ok, result, _} = parse(any_char_parser(), "yz")
-        ...(27)> result
+        iex(29)> {:ok, result, _} = parse(any_char_parser(), "yz")
+        ...(29)> result
         ?y
   """
   def any_char_parser do
@@ -466,9 +505,9 @@ defmodule Peg do
   @doc ~S"""
   `char_parser` is a parser that succeeds **only** on a specific character
 
-      iex(28)> z_parser = many(char_parser("z"))
-      ...(28)> {:ok, result, _} = parse(z_parser, "zz")
-      ...(28)> result
+      iex(30)> z_parser = many(char_parser("z"))
+      ...(30)> {:ok, result, _} = parse(z_parser, "zz")
+      ...(30)> result
       [?z, ?z]
 
   end
@@ -493,25 +532,25 @@ defmodule Peg do
   `char_range_parser` is one of the most used building stones for parsers as it succeeds on various subsets
   of the utf8 chracter set
 
-      iex(29)> vowel_parser = char_range_parser("aeiou", "vowel")
-      ...(29)> {:ok, vowel, _} = parse(vowel_parser, "o")
-      ...(29)> {:error, "vowel", %{errors: ["vowel"]}} = parse(vowel_parser, "x")
-      ...(29)> vowel
+      iex(31)> vowel_parser = char_range_parser("aeiou", "vowel")
+      ...(31)> {:ok, vowel, _} = parse(vowel_parser, "o")
+      ...(31)> {:error, "vowel", %{errors: ["vowel"]}} = parse(vowel_parser, "x")
+      ...(31)> vowel
       ?o
 
-      iex(30)> some_chars_parser = char_range_parser([?a..?b, ?d, ?0..?1])
-      ...(30)> {:ok, a, _} = parse(some_chars_parser, "a")
-      ...(30)> {:ok, d, _} = parse(some_chars_parser, "d")
-      ...(30)> {:ok, z, _} = parse(some_chars_parser, "0x")
-      ...(30)> {:error, name, _} = parse(some_chars_parser, "x")
-      ...(30)> [a, d, z, name]
+      iex(32)> some_chars_parser = char_range_parser([?a..?b, ?d, ?0..?1])
+      ...(32)> {:ok, a, _} = parse(some_chars_parser, "a")
+      ...(32)> {:ok, d, _} = parse(some_chars_parser, "d")
+      ...(32)> {:ok, z, _} = parse(some_chars_parser, "0x")
+      ...(32)> {:error, name, _} = parse(some_chars_parser, "x")
+      ...(32)> [a, d, z, name]
       [?a, ?d, ?0, "char_range_parser([97..98, 100, 48..49])"]
 
   As we can see it might again be a good idea to name the parser
 
-      iex(31)> some_chars_parser = char_range_parser(?a..?b, "a or b")
-      ...(31)> {:error, name, _} = parse(some_chars_parser, "x")
-      ...(31)> name
+      iex(33)> some_chars_parser = char_range_parser(?a..?b, "a or b")
+      ...(33)> {:error, name, _} = parse(some_chars_parser, "x")
+      ...(33)> name
       "a or b"
   end
   """
@@ -540,11 +579,36 @@ defmodule Peg do
   end
 
   @doc ~S"""
+  `empty_parser` parses all input without consuming it, by default it returns a tuple of
+  the form `{:ignore, nil, input}`
+
+      iex(34)> input = Peg.Input.new("hello")
+      ...(34)> {:ignore, nil, ^input} = parse(empty_parser(), input)
+      ...(34)> :ok
+      :ok
+
+  however this can be changed by means of the `return_val:` parameter
+
+      iex(35)> input = Peg.Input.new("hello")
+      ...(35)> {:ok, 42, ^input} = parse(empty_parser(42), input)
+      ...(35)> :ok
+      :ok
+
+  """
+  def empty_parser(return_val \\ nil)
+  def empty_parser(return_val) do
+    status = if return_val == nil, do: :ignore, else: :ok
+    fn input ->
+      {status, return_val, input}
+    end
+  end
+
+  @doc ~S"""
   `eol_parser` succeeds only at the end of a line and consumes the line
 
-      iex(32)> {:ok, "\n", _} = parse(eol_parser(), "")
-      ...(32)> {:error, parser, _} = parse(eol_parser(), " ")
-      ...(32)> parser
+      iex(36)> {:ok, "\n", _} = parse(eol_parser(), "")
+      ...(36)> {:error, parser, _} = parse(eol_parser(), " ")
+      ...(36)> parser
       "eol_parser"
 
   """
@@ -558,10 +622,10 @@ defmodule Peg do
   @doc ~S"""
   `not_char_range_parser` parses the inverse set of utf8 characters indicated
 
-      iex(33)> not_an_a = not_char_range_parser(?a..?a, "not an a")
-      ...(33)> {:error, "not an a", _} = parse(not_an_a, "a")
-      ...(33)> {:ok, result, _} = parse(not_an_a, "b")
-      ...(33)> result
+      iex(37)> not_an_a = not_char_range_parser(?a..?a, "not an a")
+      ...(37)> {:error, "not an a", _} = parse(not_an_a, "a")
+      ...(37)> {:ok, result, _} = parse(not_an_a, "b")
+      ...(37)> result
       ?b
   """
   def not_char_range_parser(range_defs, name \\ nil, cut \\ false)
@@ -588,56 +652,89 @@ defmodule Peg do
     |> satisfy(fn value -> !_in_element?(value, range) end, name1, cut)
   end
 
+  @predefined_regexen %{
+    alpha: ~R/\A[[:alpha:]]+/,
+    alnum: ~R/\A[[:alnum:]]+/,
+    name: ~R/\A[_[:alpha:]][_[:alnum:]]*/
+  }
+
   @doc ~S"""
   `regex_parser` gives us the power of regexen to parse some tokens, although in some
   cases performance might inhibit its usage in other cases the parsers can become quite
   a bit simpler
 
-        iex(34)> name_rgx = ~r/ \A [[:alpha:]] ( (?:[[:alnum:]]|_)* ) /x
-        ...(34)> name_parser = regex_parser(name_rgx, "a name")
-        ...(34)> {:error, "a name", _} = parse(name_parser, "_alpha_42")
-        ...(34)> {:ok, matches, _} = parse(name_parser, "alpha_42")
-        ...(34)> matches
+        iex(38)> name_rgx = ~r/ \A [[:alpha:]] ( (?:[[:alnum:]]|_)* ) /x
+        ...(38)> name_parser = regex_parser(name_rgx, "a name")
+        ...(38)> {:error, "a name", _} = parse(name_parser, "_alpha_42")
+        ...(38)> {:ok, matches, _} = parse(name_parser, "alpha_42")
+        ...(38)> matches
         ["alpha_42", "lpha_42"]
 
   **N.B.** That we get the captures too, if we want to flatten the result we need to use map
 
-        iex(35)> name_rgx = ~r/ \A [[:alpha:]] (?:[[:alnum:]]|_)* /x
-        ...(35)> name_parser = regex_parser(name_rgx, "a name") |> map(&List.first/1)
-        ...(35)> {:ok, name, _} = parse(name_parser, "alpha_42")
-        ...(35)> name
+        iex(39)> name_rgx = ~r/ \A [[:alpha:]] (?:[[:alnum:]]|_)* /x
+        ...(39)> name_parser = regex_parser(name_rgx, "a name") |> map(&List.first/1)
+        ...(39)> {:ok, name, _} = parse(name_parser, "alpha_42")
+        ...(39)> name
         "alpha_42"
 
   For convenience for the user a string can be passed in instead of a regex. This string is
   then compiled to a regex by the parser
 
-        iex(36)> digit_parser = regex_parser("\\d")
-        ...(36)> {:ok, result, _} = parse(digit_parser, "2")
-        ...(36)> result
+        iex(40)> digit_parser = regex_parser("\\d")
+        ...(40)> {:ok, result, _} = parse(digit_parser, "2")
+        ...(40)> result
         ["2"]
+
+  Often repeating regexen can be access by their name using an atom, and here is the list of the associated regexen
+
+  ```elixir
+      :alpha → /\A[[:alpha:]]+/
+      :alnum → /\A[[:alnum:]]+/
+      :name  → /\A[_[:alpha:]][_[:alnum:]]*/
+  ```
+
+  And furthermore the result is mapped to a string
+
+  E.g.
+        iex(41)> name_parser = regex_parser(:name)
+        ...(41)> {:error, "regex_parser :name", _} = parse(name_parser, "42")
+        ...(41)> {:ok, result, _} = parse(name_parser, "_42")
+        ...(41)> result
+        "_42"
 
   **N.B.** that this might raise a `Regex.CompileError`
 
   """
-  def regex_parser(rgx_or_str, name \\ "regex_parser")
+  def regex_parser(rgx_or_str_or_atom, name \\ nil)
+
+  def regex_parser(atom, name) when is_atom(atom) do
+    case Map.fetch(@predefined_regexen, atom) do
+      {:ok, regex} -> regex_parser(regex, name || "regex_parser :#{atom}") |> map_to_string()
+        :error ->
+          raise ArgumentError,
+          "undefined predefined regex :#{atom}\nPredefined are:\n\t#{@predefined_regexen|>Map.keys|>Enum.join(", ")}"
+    end
+  end
 
   def regex_parser(str, name) when is_binary(str),
     do: str |> Regex.compile!() |> regex_parser(name)
 
   def regex_parser(rgx, name) do
+    name1 = name || "regex_parser"
     fn input ->
       input.current
-      |> parse_regex(input, rgx, name)
+      |> parse_regex(input, rgx, name1)
     end
   end
 
   @doc ~S"""
   `word_parser` is a convenience parser that parses an exact sequence of characters
 
-        iex(37)> keyword_parser = word_parser("if", "kwd: if")
-        ...(37)> {:error, "kwd: if", _} = parse(keyword_parser, "else")
-        ...(37)> {:ok, result,  _} = parse(keyword_parser, "if")
-        ...(37)> result
+        iex(42)> keyword_parser = word_parser("if", "kwd: if")
+        ...(42)> {:error, "kwd: if", _} = parse(keyword_parser, "else")
+        ...(42)> {:ok, result,  _} = parse(keyword_parser, "if")
+        ...(42)> result
         "if"
   """
   def word_parser(word, name \\ nil) do
@@ -653,23 +750,23 @@ defmodule Peg do
   It is therefore one of only two parsers that traverse lines, the second being `eol_parser`,
   the difference being that `ws_parser` can traverse many lines
 
-      iex(38)> input = [
-      ...(38)> "    ",
-      ...(38)> "",
-      ...(38)> "next"]
-      ...(38)> {:ok, result, _} = parse(ws_parser(), input)
-      ...(38)> result
+      iex(43)> input = [
+      ...(43)> "    ",
+      ...(43)> "",
+      ...(43)> "next"]
+      ...(43)> {:ok, result, _} = parse(ws_parser(), input)
+      ...(43)> result
       "    \n\n"
 
   If, on the other hand, we do not want to traverse lines we can set the `vertical` parameter
   to false
 
-      iex(39)> input = [
-      ...(39)> "    ",
-      ...(39)> "",
-      ...(39)> "next"]
-      ...(39)> {:ok, result, %{current: rest}} = parse(ws_parser(false), input)
-      ...(39)> {result, rest}
+      iex(44)> input = [
+      ...(44)> "    ",
+      ...(44)> "",
+      ...(44)> "next"]
+      ...(44)> {:ok, result, %{current: rest}} = parse(ws_parser(false), input)
+      ...(44)> {result, rest}
       {"    ", "\n"}
 
   """
@@ -748,6 +845,10 @@ defmodule Peg do
       |> map(&to_string/1)
 
     word_parser.(input)
+  end
+
+  defp _token(parser, vertical, name) do
+    &parse_parser_token(&1, parser, vertical, name)
   end
 
   defp vertical_ws_parser(name \\ "vertical white space") do

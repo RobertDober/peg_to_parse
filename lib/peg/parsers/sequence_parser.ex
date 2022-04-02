@@ -20,11 +20,5 @@ defmodule Peg.Parsers.SequenceParser do
     end
   end
 
-  defp _parse(parser, input) do
-    case Peg.parse(parser, input) do
-      {status, r, i} -> {status, {r, i}}
-    end
-  end
-
 end
 # SPDX-License-Identifier: Apache-2.0
